@@ -35,7 +35,21 @@ class Pipeline:
             arguments["--FAIL_BEFORE_PUBLISH"] = str(fail_before_publish).lower()
             arguments["--RESET_DAY"] = str(reset_day).lower()
         name = self.outputs[f"{kind}_job_name"]
-        run_id = self.glue.start_job_run(JobName=name, Arguments=arguments)["JobRunId"]
+        start_deadline = time.monotonic() + 120
+        while True:
+            try:
+                run_id = self.glue.start_job_run(JobName=name, Arguments=arguments)["JobRunId"]
+                break
+            except self.glue.exceptions.ConcurrentRunsExceededException:
+                # Glue can briefly retain the concurrency slot after a run succeeds.
+                remaining = start_deadline - time.monotonic()
+                if remaining <= 0:
+                    raise
+                delay = min(10, remaining)
+                print(f"{name}: Glue rejected the start at its concurrency limit; waiting {delay:g}s (120s maximum)", flush=True)
+                time.sleep(delay)
+                if time.monotonic() >= start_deadline:
+                    raise
         print(f"Started {name} {run_id} ({hours})", flush=True)
         deadline = time.monotonic() + 3600
         previous = None

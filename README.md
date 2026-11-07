@@ -94,6 +94,8 @@ make verify                 # reconcile completions, events and aggregates
 
 Each command waits for its AWS run and prints its run/query IDs. Ingestion downloads one archive at a time to Glue's temporary disk, checks the entire gzip stream including its CRC, and then uploads it. Validated raw objects are reused on later runs. The runtime never needs the full day on local disk. To process only chosen hours, use `make etl HOURS=3,4,5`; this starts one Spark job for the selection.
 
+Glue can briefly retain its concurrency slot after a run finishes. If `StartJobRun` explicitly rejects a new start with `ConcurrentRunsExceededException`, the operator waits in intervals of at most 10 seconds, for at most two minutes, before returning the last rejection. Once Glue accepts a run, the operator only polls that run; other start errors, including timeouts with an unknown outcome, are returned immediately.
+
 The operator CLI reads initialized Terraform outputs. When running it somewhere without Terraform, export `terraform -chdir=terraform output -json` to a **private** file and pass `python scripts/run.py verify --outputs /absolute/private/outputs.json`.
 
 ### 4. Enable the real QuickSight dashboard
@@ -144,7 +146,7 @@ Deployment checkpoint, **November 7, 2026**, in Ohio (`us-east-2`):
 | Check | Observed result |
 | --- | --- |
 | Terraform formatting and validation | Passed for the project and separate state bootstrap |
-| Offline Spark/Parquet/SQL regression tests | All five passed |
+| Offline regression tests | All nine passed: five Spark/Parquet/SQL tests and four operator tests |
 | Full-day ingestion and Spark processing | Succeeded for all 24 archive files |
 | Raw-row reconciliation | 5,378,686 source rows; all 24 object row counts matched Spark |
 | Athena full-day reconciliation | 189,818 valid opening events; 24 completed hours, no rejected or duplicate openings |
@@ -153,11 +155,15 @@ Deployment checkpoint, **November 7, 2026**, in Ohio (`us-east-2`):
 | Largest repository share in the busiest hour | `Nix-Drone/mergequeue-github`, 1.0404% |
 | Reprocess hour 23 | Every logical event matched the original full-day hash |
 | Deliberate failure after Parquet write | Failed hour became missing/null; other 23 hours stayed identical; repair restored the original full-day hash |
+| Presentation rehearsal | Prepared and verified 23 hours; final-hour run restored 24 hours and 189,818 openings |
+| Final-hour processing time in this rehearsal | 122 seconds of Glue execution, about 2 minutes 15 seconds from start to completion |
 | Core infrastructure drift | No changes after deployment |
 | Teardown preview | Only the 22 core project resources; no deletion executed |
 | QuickSight deployment and visual inspection | Pending account access: AWS Organizations explicitly denies QuickSight until the account administrator resolves the restriction |
 
 The full-day logical-event SHA-256 after both repeat and recovery checks was `d7804e32da48b85d19c7b139db2187e474b4188014b858ad277b9a8d7c6337e6`. Deployment state, credentials and detailed run logs are kept privately outside this repository. The dashboard remains unverified; successful Glue and Athena runs do not establish that QuickSight works.
+
+The rehearsal's first immediate final-hour start was rejected by Glue's concurrency limit after the preparation job had reported success. A later start succeeded. The bounded start retry described above was added afterward and verified with botocore-stub tests, including exhaustion and unrelated/ambiguous errors. That specific retry path has not yet been reproduced live with the updated operator. The stack is currently left at the complete 24-hour result, with no active Glue runs, for account-owner validation. No teardown has been executed.
 
 To run the local checks and inspect a deployed stack yourself:
 
