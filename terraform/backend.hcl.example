@@ -1,0 +1,5 @@
+bucket       = "YOUR-PRIVATE-TERRAFORM-STATE-BUCKET"
+key          = "cis551-github-analytics/terraform.tfstate"
+region       = "us-east-2"
+encrypt      = true
+use_lockfile = true

@@ -1,0 +1,5 @@
+aws_region          = "us-east-2"
+project_name        = "cis551-github-analytics"
+archive_day         = "2024-10-15"
+enable_quicksight    = false
+quicksight_user_arn = "arn:aws:quicksight:us-east-2:123456789012:user/default/YOUR-USER"

@@ -1,0 +1,17 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+backend.hcl
+.env
+.venv/
+__pycache__/
+*.pyc
+data/
+*.parquet
+*.json.gz
+evidence/
+.DS_Store
