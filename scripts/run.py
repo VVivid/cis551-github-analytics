@@ -10,6 +10,7 @@ import subprocess
 import time
 
 import boto3
+from botocore.config import Config
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +27,8 @@ class Pipeline:
         self.day = outputs["archive_day"]
         self.database = outputs["database_name"]
         self.glue = boto3.client("glue", region_name=region)
+        # A lost StartJobRun response may already have started a billed job.
+        self.glue_start_client = boto3.client("glue", region_name=region, config=Config(retries={"total_max_attempts": 1}))
         self.athena = boto3.client("athena", region_name=region)
 
     def job(self, kind, hours="all", fail_before_publish=False, reset_day=False):
@@ -38,9 +41,9 @@ class Pipeline:
         start_deadline = time.monotonic() + 120
         while True:
             try:
-                run_id = self.glue.start_job_run(JobName=name, Arguments=arguments)["JobRunId"]
+                run_id = self.glue_start_client.start_job_run(JobName=name, Arguments=arguments)["JobRunId"]
                 break
-            except self.glue.exceptions.ConcurrentRunsExceededException:
+            except self.glue_start_client.exceptions.ConcurrentRunsExceededException:
                 # Glue can briefly retain the concurrency slot after a run succeeds.
                 remaining = start_deadline - time.monotonic()
                 if remaining <= 0:

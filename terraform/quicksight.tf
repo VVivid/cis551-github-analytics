@@ -21,13 +21,35 @@ locals {
       columns = { hour_utc = "STRING", processing_status = "STRING", opening_count = "INTEGER", raw_events = "INTEGER", rejected_openings = "INTEGER", duplicate_openings = "INTEGER", completed_at = "STRING" }
     }
   }
+  # Match the order QuickSight returns for this dashboard to avoid order-only updates.
+  dashboard_dataset_declaration_order = ["coverage", "overview", "repositories", "concentration", "hourly"]
+
   bar_charts = {
-    hourly        = { title = "PR openings by archive hour (UTC)", category = "hour_utc", value = "opening_count", orientation = "VERTICAL", sort = "ASC", sort_field = "hourly-category", column = 0, row = 8, width = 36, height = 14 }
-    repositories  = { title = "Top 10 repositories across completed hours", category = "repository", value = "opening_count", orientation = "HORIZONTAL", sort = "DESC", sort_field = "repositories-value", column = 0, row = 22, width = 18, height = 18 }
-    concentration = { title = "Busiest hour: top repositories' share (%)", category = "repository", value = "share_percent", orientation = "HORIZONTAL", sort = "DESC", sort_field = "concentration-value", column = 18, row = 22, width = 18, height = 18 }
+    hourly        = { title = "PR openings by archive hour (UTC)", category = "hour_utc", value = "opening_count", orientation = "VERTICAL", sort = "ASC", sort_field = "hourly-category", column = 0, row = 3, width = 36, height = 7 }
+    repositories  = { title = "Top 10 repositories across completed hours", category = "repository", value = "opening_count", orientation = "HORIZONTAL", sort = "DESC", sort_field = "repositories-value", column = 0, row = 10, width = 18, height = 9 }
+    concentration = { title = "Busiest hour: top repositories' share (%)", category = "repository", value = "share_percent", orientation = "HORIZONTAL", sort = "DESC", sort_field = "concentration-value", column = 18, row = 10, width = 18, height = 9 }
   }
   summary_columns  = ["report_status", "completed_hours", "missing_hours", "total_openings", "busiest_hour_utc", "top_10_share_percent", "busiest_top_repository", "busiest_top_repository_share_percent"]
   coverage_columns = ["hour_utc", "processing_status", "opening_count", "raw_events", "rejected_openings", "duplicate_openings", "completed_at"]
+  summary_column_labels = {
+    report_status                        = "Coverage"
+    completed_hours                      = "Hours complete"
+    missing_hours                        = "Hours missing"
+    total_openings                       = "PR openings"
+    busiest_hour_utc                     = "Busiest hour (UTC)"
+    top_10_share_percent                 = "Top 10 share (%)"
+    busiest_top_repository               = "Peak-hour top repository"
+    busiest_top_repository_share_percent = "Peak repo share (%)"
+  }
+  coverage_column_labels = {
+    hour_utc           = "Archive hour (UTC)"
+    processing_status  = "Status"
+    opening_count      = "PR openings"
+    raw_events         = "Raw events"
+    rejected_openings  = "Rejected openings"
+    duplicate_openings = "Duplicates removed"
+    completed_at       = "Completed at (UTC)"
+  }
 }
 
 resource "aws_iam_role" "quicksight" {
@@ -118,12 +140,21 @@ resource "aws_quicksight_dashboard" "analytics" {
     principal = var.quicksight_user_arn
     actions   = ["quicksight:DescribeDashboard", "quicksight:ListDashboardVersions", "quicksight:UpdateDashboardPermissions", "quicksight:QueryDashboard", "quicksight:UpdateDashboard", "quicksight:DeleteDashboard", "quicksight:DescribeDashboardPermissions", "quicksight:UpdateDashboardPublishedVersion"]
   }
+  lifecycle {
+    precondition {
+      condition = (
+        length(local.dashboard_dataset_declaration_order) == length(local.dashboard_datasets) &&
+        toset(local.dashboard_dataset_declaration_order) == toset(keys(local.dashboard_datasets))
+      )
+      error_message = "dashboard_dataset_declaration_order must contain every dashboard_datasets key exactly once."
+    }
+  }
   definition {
     dynamic "data_set_identifiers_declarations" {
-      for_each = aws_quicksight_data_set.analytics
+      for_each = local.dashboard_dataset_declaration_order
       content {
-        identifier   = data_set_identifiers_declarations.key
-        data_set_arn = data_set_identifiers_declarations.value.arn
+        identifier   = data_set_identifiers_declarations.value
+        data_set_arn = aws_quicksight_data_set.analytics[data_set_identifiers_declarations.value].arn
       }
     }
     sheets {
@@ -137,6 +168,15 @@ resource "aws_quicksight_dashboard" "analytics" {
             format_text { plain_text = "Coverage and concentration · percentages use completed hours" }
           }
           chart_configuration {
+            field_options {
+              dynamic "selected_field_options" {
+                for_each = local.summary_columns
+                content {
+                  field_id     = "summary-${selected_field_options.value}"
+                  custom_label = local.summary_column_labels[selected_field_options.value]
+                }
+              }
+            }
             field_wells {
               table_unaggregated_field_wells {
                 dynamic "values" {
@@ -164,6 +204,8 @@ resource "aws_quicksight_dashboard" "analytics" {
             }
             chart_configuration {
               orientation = visuals.value.orientation
+              category_label_options { visibility = "HIDDEN" }
+              value_label_options { visibility = "HIDDEN" }
               field_wells {
                 bar_chart_aggregated_field_wells {
                   category {
@@ -205,7 +247,7 @@ resource "aws_quicksight_dashboard" "analytics" {
             canvas_size_options {
               screen_canvas_size_options {
                 resize_option             = "FIXED"
-                optimized_view_port_width = "1440px"
+                optimized_view_port_width = "1366px"
               }
             }
             elements {
@@ -214,7 +256,7 @@ resource "aws_quicksight_dashboard" "analytics" {
               column_index = 0
               row_index    = 0
               column_span  = 36
-              row_span     = 8
+              row_span     = 3
             }
             dynamic "elements" {
               for_each = local.bar_charts
@@ -242,6 +284,15 @@ resource "aws_quicksight_dashboard" "analytics" {
             format_text { plain_text = "All 24 archive hours (UTC)" }
           }
           chart_configuration {
+            field_options {
+              dynamic "selected_field_options" {
+                for_each = local.coverage_columns
+                content {
+                  field_id     = "coverage-${selected_field_options.value}"
+                  custom_label = local.coverage_column_labels[selected_field_options.value]
+                }
+              }
+            }
             field_wells {
               table_unaggregated_field_wells {
                 dynamic "values" {
@@ -274,13 +325,19 @@ resource "aws_quicksight_dashboard" "analytics" {
       layouts {
         configuration {
           grid_layout {
+            canvas_size_options {
+              screen_canvas_size_options {
+                resize_option             = "FIXED"
+                optimized_view_port_width = "1366px"
+              }
+            }
             elements {
               element_id   = "coverage"
               element_type = "VISUAL"
               column_index = 0
               row_index    = 0
               column_span  = 36
-              row_span     = 32
+              row_span     = 21
             }
           }
         }
