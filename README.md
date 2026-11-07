@@ -159,7 +159,9 @@ Deployment checkpoint, **November 7, 2026**, in Ohio (`us-east-2`):
 | Final-hour processing time in this rehearsal | 122 seconds of Glue execution, about 2 minutes 15 seconds from start to completion |
 | Core infrastructure drift | No changes after deployment |
 | Teardown preview | Only the 22 core project resources; no deletion executed |
-| QuickSight deployment and visual inspection | Pending account access: AWS Organizations explicitly denies QuickSight until the account administrator resolves the restriction |
+| QuickSight service access | Available after advanced-features activation |
+| QuickSight Terraform preview | Nine additions, no changes or deletions; not applied |
+| QuickSight deployment and visual inspection | Pending account subscription; no subscription or dashboard created |
 
 The full-day logical-event SHA-256 after both repeat and recovery checks was `d7804e32da48b85d19c7b139db2187e474b4188014b858ad277b9a8d7c6337e6`. Deployment state, credentials and detailed run logs are kept privately outside this repository. The dashboard remains unverified; successful Glue and Athena runs do not establish that QuickSight works.
 
